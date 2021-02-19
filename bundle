@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# this script wants to be called with the path to the PCem build directory, e.g.:
+# sh bundle ../PCemV17macOS
+
+# NOTICE: Make sure the pcem binary has been built with the command:
+#
+#   make -j4 -Wl,headerpad_max_install_names
+#
+# ---- without headerpad_max_install_names, install_name_tool might rewrite the binary into a broken executable
+
+pcem_build_path="$1"
+
+if [ -z "$1/pcem" ]; then
+    echo "No pcem build path has been provided or no pcem executable has been found there. Exiting."
+    exit 1
+fi
+
+# clean from previous build
+rm -rf macos
+rm -rf pcem.iconset
+rm -rf pcem.icns
+
+# generate icns file
+sh icns_creator.sh pcem-icon.png pcem
+
+# create bundle directory structure
+mkdir -p macos/build/PCem.app/Contents/MacOS
+mkdir -p macos/build/PCem.app/Contents/MacOS/screenshots
+mkdir -p macos/build/PCem.app/Contents/Resources
+
+# copy necessary files
+cp Info.plist macos/build/PCem.app/Contents
+cp pcem.icns macos/build/PCem.app/Contents/Resources
+cp "${pcem_build_path}/pcem" macos/build/PCem.app/Contents/MacOS
+cp launch_pcem.sh macos/build/PCem.app/Contents/MacOS
+
+# set executable permission
+chmod +x macos/build/PCem.app/Contents/MacOS/pcem
+chmod +x macos/build/PCem.app/Contents/MacOS/launch_pcem.sh
+
+# dynamically analyzed dylibs of the executable,
+# copies over system's dylibs into the local App bundle
+# and re-links them in the App bundles executable pcem binary
+node ./rewrite_dylibs.js
+
+# copy over directories
+cp -R "${pcem_build_path}/roms" macos/build/PCem.app/Contents/MacOS
+cp -R "${pcem_build_path}/configs" macos/build/PCem.app/Contents/MacOS
+cp -R "${pcem_build_path}/nvr" macos/build/PCem.app/Contents/MacOS
+
+# create install DMG
+sh make-app-dmg
